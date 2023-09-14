@@ -17,6 +17,7 @@ import com.example.orderorchestrator.service.workflow.OrderWorkflow;
 import com.example.orderorchestrator.service.workflow.Workflow;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -27,6 +28,7 @@ import java.util.List;
 public class OrchestratorServiceImpl implements OrchestratorService {
   private final InventoryRoute inventoryRoute;
   private final PaymentRoute paymentRoute;
+  private final KafkaTemplate kafkaTemplate;
   public OrchestratorResponseDTO orderProduct(final OrchestratorRequestDTO requestDTO) {
 
 
@@ -40,13 +42,17 @@ public class OrchestratorServiceImpl implements OrchestratorService {
 
       if (!result) {
         try {
-          return revertOrder(orderWorkflow, requestDTO);
+          OrchestratorResponseDTO responseDTO = revertOrder(orderWorkflow, requestDTO);
+          kafkaTemplate.send("update-order", responseDTO);
+          return responseDTO;
         } catch (Exception ex) {
           throw new RuntimeException("Failed to revert order!", ex);
         }
       }
     }
-    return getResponseDTO(requestDTO, OrderStatus.ORDER_COMPLETED);
+    OrchestratorResponseDTO responseDTO= getResponseDTO(requestDTO, OrderStatus.ORDER_COMPLETED);
+    kafkaTemplate.send("update-order", responseDTO);
+    return responseDTO;
   }
 
   private OrchestratorResponseDTO revertOrder(final Workflow workflow, final OrchestratorRequestDTO requestDTO) {
